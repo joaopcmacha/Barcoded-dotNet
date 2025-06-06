@@ -1,6 +1,5 @@
-﻿using System;
-using System.Drawing;
-using System.Drawing.Imaging;
+﻿using SkiaSharp;
+using System;
 using System.IO;
 
 namespace Barcoded
@@ -11,6 +10,8 @@ namespace Barcoded
         protected LinearEncoder(Symbology symbology)
         {
             Symbology = symbology;
+            // Initialize with default Barcoded.ImageFormat
+            ImageCodec = ImageFormat.Png;
         }
 
         /// <summary>
@@ -154,29 +155,29 @@ namespace Barcoded
         /// The font to be used for the human readable value, if shown.
         /// Will default to the system default font if not set.
         /// </summary>
-        public Font HumanReadableFont { get; internal set; } = SystemFonts.DefaultFont;
+        public SKTypeface HumanReadableFont { get; internal set; } = SKTypeface.Default;
+        public float HumanReadableFontSize { get; internal set; } = 12f;
 
         /// <summary>
         /// Set the font to be used for the human readable label.
         /// </summary>
         /// <param name="fontFamily"></param>
         /// <param name="pointSize"></param>
-        public void SetHumanReadableFont(string fontFamily, int pointSize)
+        public void SetHumanReadableFont(string fontFamily, float pointSize)
         {
-            if(pointSize < 1)
-            {
-                pointSize = (int)SystemFonts.DefaultFont.Size;
-            }
+            if (pointSize < 1)
+                pointSize = 12f;
 
             try
             {
-                HumanReadableFont = new Font(new FontFamily(fontFamily), pointSize);
+                HumanReadableFont = SKTypeface.FromFamilyName(fontFamily)?? SKTypeface.Default;
             }
             catch (Exception)
             {
-                HumanReadableFont = SystemFonts.DefaultFont;
+                HumanReadableFont = SKTypeface.Default;
             }
 
+            HumanReadableFontSize = pointSize;
             PropertyChanged = true;
         }
 
@@ -289,19 +290,20 @@ namespace Barcoded
         /// The font to be used for the encoding label if shown.
         /// Will default to the system default font, if not set.
         /// </summary>
-        public FontFamily EncodingFontFamily { get; private set; } = SystemFonts.DefaultFont.FontFamily;
+        public SKTypeface EncodingFontFamily { get; private set; } = SKTypeface.Default;
+        public float EncodingFontSize { get; private set; } = 10f;
 
-        public void SetEncodingFontFamily(string fontFamily)
+        public void SetEncodingFontFamily(string fontFamily, float fontSize = 10f)
         {
             try
             {
-                EncodingFontFamily = new FontFamily(fontFamily);
+                EncodingFontFamily = SKTypeface.FromFamilyName(fontFamily) ?? SKTypeface.Default;
             }
             catch (Exception)
             {
-                EncodingFontFamily = SystemFonts.DefaultFont.FontFamily;
+                EncodingFontFamily = SKTypeface.Default;
             }
-
+            EncodingFontSize = fontSize < 1 ? 10f : fontSize;
             PropertyChanged = true;
         }
 
@@ -320,10 +322,17 @@ namespace Barcoded
             }
         }
 
-        public ImageCodecInfo ImageCodec { get; private set; } = ImageHelpers.FindCodecInfo("PNG");
+        /// <summary>
+        /// Gets or sets the image codec format using Barcoded.ImageFormat.
+        /// </summary>
+        public ImageFormat ImageCodec { get; set; } // Changed type to Barcoded.ImageFormat
+
+        /// <summary>
+        /// Gets or sets the image codec format using a string name (e.g., "PNG", "JPEG").
+        /// </summary>
         public string CodecName
         {
-            get => ImageCodec.FormatDescription;
+            get => ImageCodec.ToString();
             set
             {
                 ImageCodec = ImageHelpers.FindCodecInfo(value);

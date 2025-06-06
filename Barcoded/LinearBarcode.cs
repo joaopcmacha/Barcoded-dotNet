@@ -1,6 +1,6 @@
-﻿using System;
+﻿using SkiaSharp;
+using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 
@@ -9,34 +9,41 @@ namespace Barcoded
     /// <summary>
     /// Linear (one-dimensional) barcode.
     /// </summary>
-    public class LinearBarcode
+    public class LinearBarcode : ImageWriter
     {
         private bool _barcodeValueChanged;
-        
+
+        private string _internalBarcodeValue; // Renamed to avoid conflict with inherited abstract property
+        /// <summary>
+        /// Value to encode.
+        /// </summary>
+        public string ValueToEncode // Renamed for clarity, or use the abstract property directly
+        {
+            get => _internalBarcodeValue;
+            set
+            {
+                _internalBarcodeValue = value;
+                _barcodeValueChanged = true;
+            }
+        }
+
+        protected SKBitmap _image;
+
+        // Implementation for ImageWriter abstract members
+        protected override string BarcodeValue => this.ValueToEncode; // Access the renamed property
+        protected override SKBitmap CurrentImage => this._image;
+        protected override void PerformUpdateBarcode() => this.UpdateBarcode();
+        protected override LinearEncoder EncoderInstance => this.Encoder;
+
         /// <summary>
         /// Barcode symbology.
         /// </summary>
         public Symbology Symbology { get; }
 
-        private string _barcodeValue;
-        /// <summary>
-        /// Value to encode.
-        /// </summary>
-        public string BarcodeValue
-        {
-            get => _barcodeValue;
-            set
-            {
-                _barcodeValue = value;
-                _barcodeValueChanged = true;
-            }
-        }
-
-        private Image _image;
         /// <summary>
         /// Barcode image.
         /// </summary>
-        public Image Image
+        public SKBitmap Image
         {
             get
             {
@@ -65,7 +72,7 @@ namespace Barcoded
         {
             get
             {
-                Encoder.Generate(BarcodeValue);
+                Encoder.Generate(ValueToEncode);
                 return Encoder.LinearEncoding.MinimumWidth;
             }
         }
@@ -74,7 +81,7 @@ namespace Barcoded
         {
             get
             {
-                Encoder.Generate(BarcodeValue);
+                Encoder.Generate(ValueToEncode);
                 return Encoder.ZplEncode;
             }
         }
@@ -102,7 +109,7 @@ namespace Barcoded
         /// <exception cref="ArgumentNullException"></exception>
         public LinearBarcode(string barcodeValue, Symbology symbology)
         {
-            BarcodeValue = barcodeValue ?? throw new ArgumentNullException(nameof(barcodeValue));
+            this.ValueToEncode = barcodeValue ?? throw new ArgumentNullException(nameof(barcodeValue));
             Symbology = symbology;
 
             switch (symbology)
@@ -232,44 +239,62 @@ namespace Barcoded
         /// </summary>
         /// <param name="codec">Codec for the image format to be saved.</param>
         /// <returns>Byte array of the barcode image.</returns>
-        /// <exception cref="NullReferenceException"></exception>
+        /// <exception cref="ArgumentNullException"></exception>
         /// <exception cref="InvalidOperationException"></exception>
         public byte[] SaveImage(string codec)
         {
-            Encoder.CodecName = codec ?? throw new NullReferenceException(nameof(codec));
+            Encoder.CodecName = codec ?? throw new ArgumentNullException(nameof(codec));
 
-            if (string.IsNullOrWhiteSpace(BarcodeValue))
+            if (string.IsNullOrWhiteSpace(ValueToEncode))
             {
                 throw new InvalidOperationException("No BarcodeValue set");
             }
 
-            MemoryStream imageMemoryStream = Encoder.GetImage(BarcodeValue);
-            _image = Image.FromStream(imageMemoryStream);
+            using var imageMemoryStream = Encoder.GetImage(ValueToEncode);
+            imageMemoryStream.Position = 0;
+            using var skiaImage = SKImage.FromEncodedData(imageMemoryStream);
+            _image = skiaImage?.ToBitmap() ?? throw new InvalidOperationException("Failed to create image from stream.");
             _vectors = new LinearVectors(Encoder);
             _barcodeValueChanged = false;
             return imageMemoryStream.ToArray();
+        }
 
+        public static SKBitmap ToBitmap(SKImage image)
+        {
+            return image != null ? SKBitmap.FromImage(image) : null;
         }
 
         /// <summary>
         /// Checks if any barcode settings have changed since the last call and creates a new barcode if they have.
         /// </summary>
         /// <exception cref="InvalidOperationException"></exception>
-        private void UpdateBarcode()
+        protected virtual void UpdateBarcode()
         {
-            //Check that barcode value is not an empty string.
-            if (string.IsNullOrWhiteSpace(BarcodeValue))
+            if (string.IsNullOrWhiteSpace(this.ValueToEncode))
             {
                 throw new InvalidOperationException("No BarcodeValue set");
             }
 
             if (_barcodeValueChanged | Encoder.PropertyChanged)
             {
-                MemoryStream imageMemoryStream = Encoder.GetImage(BarcodeValue);
-                _image = Image.FromStream(imageMemoryStream);
+                using var imageMemoryStream = Encoder.GetImage(this.ValueToEncode);
+                imageMemoryStream.Position = 0;
+                using var skiaImage = SKImage.FromEncodedData(imageMemoryStream);
+                _image = skiaImage?.ToBitmap();
                 _vectors = new LinearVectors(Encoder);
                 _barcodeValueChanged = false;
+                Encoder.ResetPropertyChanged();
             }
+        }
+    }
+
+    public static class SkiaExtensions
+    {
+        public static SKBitmap ToBitmap(this SKImage image)
+        {
+            if (image == null) return null;
+            using var data = image.Encode();
+            return SKBitmap.Decode(data);
         }
     }
 }

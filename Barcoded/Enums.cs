@@ -55,4 +55,24 @@ namespace Barcoded
         Bar,
         Space
     };
+
+    /// <summary>
+    /// Specifies the encoded image format.
+    /// </summary>
+    public enum ImageFormat
+    {
+        /// <summary>
+        /// Specifies the Windows bitmap image format.
+        /// </summary>
+        Bmp,
+        /// <summary>
+        /// Specifies the Joint Photographic Experts Group (JPEG) image format.
+        /// </summary>
+        Jpeg,
+        /// <summary>
+        /// Specifies the W3C Portable Network Graphics (PNG) image format.
+        /// </summary>
+        Png,
+    }
+
 }

@@ -1,9 +1,9 @@
-﻿using System.Drawing;
-using System.Drawing.Imaging;
+﻿using SkiaSharp;
+using System;
 
 namespace Barcoded
 {
-    internal class ImageHelpers
+    internal static class ImageHelpers
     {
         /// <summary>
         /// Resizes the given font to fit within the specified width.
@@ -14,9 +14,9 @@ namespace Barcoded
         /// <param name="font">Font to be resized.</param>
         /// <param name="limitSizeToFont">Limit maximum font size to the original font provided.</param>
         /// <returns>Font, size adjusted to fir width.</returns>
-        internal static Font GetSizedFontForWidth(int stringLength, int width, int dpi, Font font, bool limitSizeToFont = true)
+        internal static float GetSizedFontForWidth(int stringLength, int width, int dpi, SKTypeface font, float maxFontSize = 100)
         {
-            return GetSizedFontForWidth(new string('\u0057', stringLength), width, dpi, font, limitSizeToFont);
+            return GetSizedFontForWidth(new string('\u0057', stringLength), width, dpi, font, maxFontSize);
 
         }
 
@@ -27,37 +27,23 @@ namespace Barcoded
         /// <param name="width">Available width</param>
         /// <param name="dpi">Image DPI</param>
         /// <param name="font">Font to be measured</param>
-        /// <param name="limitSizeToFont">Limit maximum font size returned to the font size provided</param>
+        /// <param name="maxFontSize">Limit maximum font size returned to the font size provided</param>
         /// <returns>Font set to the maximum size that will fit</returns>
-        internal static Font GetSizedFontForWidth(string textToFit, int width, int dpi, Font font, bool limitSizeToFont = true)
+        internal static float GetSizedFontForWidth(string textToFit, int width, int dpi, SKTypeface typeface, float maxFontSize = 100)
         {
-            Bitmap image = new Bitmap(width, 100);
-            image.SetResolution(dpi, dpi);
-            Graphics imageMeasure = Graphics.FromImage(image);
-
-            Font sizedFont = new Font(font.FontFamily, 1);
-
-            for (int fontSize = 1; fontSize <= 500; fontSize++)
+            float fontSize = 1;
+            float lastGoodSize = fontSize;
+            for (; fontSize <= maxFontSize; fontSize++)
             {
-                Font tryFont = new Font(font.FontFamily, fontSize);
-                SizeF imageSize = imageMeasure.MeasureString(textToFit, tryFont);
-
-                if (imageSize.Width < width)
-                {
-                    sizedFont = tryFont;
-                    if (fontSize == (int)font.Size && limitSizeToFont) goto ExitFor;
-                }
+                using var font = new SKFont(typeface, fontSize);
+                float textWidth = font.MeasureText(textToFit);
+                if (textWidth < width)
+                    lastGoodSize = fontSize;
                 else
-                {
-                    goto ExitFor;
-                }
-                    
-            }
+                    break;
 
-            ExitFor:
-            image.Dispose();
-            imageMeasure.Dispose();
-            return sizedFont;
+            }
+            return lastGoodSize;
         }
 
         /// <summary>
@@ -67,15 +53,14 @@ namespace Barcoded
         /// <param name="font">Font to be used</param>
         /// <param name="dpi">Image DPI</param>
         /// <returns>Measured image size</returns>
-        internal static SizeF GetStringElementSize(string text, Font font, int dpi)
+        internal static SKSize GetStringElementSize(string text, SKTypeface typeface, float fontSize, int dpi)
         {
-            Bitmap bitmap = new Bitmap(1, 1);
-            bitmap.SetResolution(dpi, dpi);
-            Graphics graphics = Graphics.FromImage(bitmap);
-            SizeF size = graphics.MeasureString(text, font);
-            graphics.Dispose();
-            bitmap.Dispose();
-            return size;
+            using var font = new SKFont(typeface, fontSize);
+
+            float width = font.MeasureText(text);
+            var metrics = font.Metrics;
+            float height = font.Metrics.Descent - font.Metrics.Ascent;
+            return new SKSize(width, height);
         }
 
         /// <summary>
@@ -84,34 +69,33 @@ namespace Barcoded
         /// <param name="codecName">Codec name.</param>
         /// <remarks>Will return PNG, if specified codec cannot be found.</remarks>
         /// <returns>Image codec.</returns>
-        internal static ImageCodecInfo FindCodecInfo(string codecName)
+        internal static ImageFormat FindCodecInfo(string codecName)
         {
-            while (true)
+            return codecName.ToUpper() switch
             {
-                codecName = codecName.ToUpper();
-
-                switch (codecName)
-                {
-                    case "JPG":
-                        codecName = "JPEG";
-                        break;
-                    case "TIF":
-                        codecName = "TIFF";
-                        break;
-                }
-
-                ImageCodecInfo[] encoders = ImageCodecInfo.GetImageEncoders();
-
-                foreach (ImageCodecInfo encoder in encoders)
-                {
-                    if (encoder.FormatDescription.Equals(codecName))
-                    {
-                        return encoder;
-                    }
-                }
-
-                codecName = "PNG";
-            }
+                "PNG" => ImageFormat.Png,
+                "JPG" or "JPEG" => ImageFormat.Jpeg,
+                "BMP" => ImageFormat.Bmp,
+                _ => ImageFormat.Png
+            };
         }
+
+        /// <summary>
+        /// Converts Barcoded.ImageFormat to SkiaSharp.SKEncodedImageFormat.
+        /// </summary>
+        /// <param name="format">The Barcoded.ImageFormat to convert.</param>
+        /// <returns>The corresponding SkiaSharp.SKEncodedImageFormat.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if the format is not supported.</exception>
+        internal static SKEncodedImageFormat ToSkiaImageFormat(ImageFormat format)
+        {
+            return format switch
+            {
+                ImageFormat.Bmp => SKEncodedImageFormat.Bmp,
+                ImageFormat.Jpeg => SKEncodedImageFormat.Jpeg,
+                ImageFormat.Png => SKEncodedImageFormat.Png,
+                _ => throw new ArgumentOutOfRangeException(nameof(format), $"Unsupported image format: {format}")
+            };
+        }
+
     }
 }
