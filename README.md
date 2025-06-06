@@ -1,9 +1,12 @@
-![Barcoded Icon](https://barcoded.online/Assets/Barcode%20Icon%201.svg)
+![Barcoded Icon](SVGs/Barcode_Style1.svg)
 # Barcoded
 A C#/.NET library to generate barcode images.
 
-[![Nuget](https://img.shields.io/nuget/v/Barcoded)](https://www.nuget.org/packages/Barcoded/1.0.1)
-[![Nuget](https://img.shields.io/nuget/dt/Barcoded)](https://www.nuget.org/packages/Barcoded/)
+Upgraded to .Net 8 and SkiaSharp.
+
+(Based on the [original code]() from Brett Reynolds)
+
+
 ## Usage
 ```C#
 LinearBarcode newBarcode = new LinearBarcode("SomeValue", Symbology.Code128BAC)
@@ -59,8 +62,8 @@ LinearBarcode newBarcode = new LinearBarcode("SomeValue", Symbology.Code128BAC)
   ```C#
   newBarcode.Encoder.Quietzone = true;
   ```
-
-## Demo
-
-Website: https://barcoded.online/
-provides a web UI that utilises the **Barcoded** library. Registration is required to support emailing of generated barcodes.
+  
+* **Save to file**
+  ```C#
+  newBarcode.SaveImageToFile(destinationPath, Barcoded.ImageFormat.Png);
+  ```
