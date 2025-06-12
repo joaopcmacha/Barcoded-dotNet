@@ -22,43 +22,56 @@ namespace Barcoded
         {
             // Convert Barcoded.ImageFormat to SKEncodedImageFormat for internal logic
             SKEncodedImageFormat skFormat = ImageHelpers.ToSkiaImageFormat(format);
-
-            return skFormat switch
+            var result = imageBytes;
+            switch (skFormat)
             {
-                SKEncodedImageFormat.Png => InjectPhysChunk(imageBytes, dpi),
-                SKEncodedImageFormat.Jpeg => InjectJpegDpi(imageBytes, dpi),
-                _ => imageBytes // BMP and WEBP: no change; either unsupported or don't store DPI
-            };
+                case SKEncodedImageFormat.Png:
+                    result = InjectPhysChunk(imageBytes, dpi);
+                    break;
+                case SKEncodedImageFormat.Jpeg:
+                    result = InjectJpegDpi(imageBytes, dpi);
+                    break; // Supported formats
+            }
+            return result;
+            //return skFormat switch
+            //{
+            //    SKEncodedImageFormat.Png => InjectPhysChunk(imageBytes, dpi),
+            //    SKEncodedImageFormat.Jpeg => InjectJpegDpi(imageBytes, dpi),
+            //    _ => imageBytes // BMP and WEBP: no change; either unsupported or don't store DPI
+            //};
         }
 
         private static byte[] InjectJpegDpi(byte[] jpegBytes, int dpi)
         {
-            using var input = new MemoryStream(jpegBytes);
-            using var output = new MemoryStream();
-
-            // Copy header (first two bytes: FF D8)
-            output.WriteByte((byte)input.ReadByte());
-            output.WriteByte((byte)input.ReadByte());
-
-            // Write APP0 segment (JFIF with DPI)
-            using (var bw = new BinaryWriter(output, System.Text.Encoding.ASCII, true))
+            using (MemoryStream input = new MemoryStream(jpegBytes))
             {
-                bw.Write((byte)0xFF); // marker
-                bw.Write((byte)0xE0); // APP0
-                bw.Write(ToBigEndian((short)16)); // length
-                bw.Write(System.Text.Encoding.ASCII.GetBytes("JFIF\0")); // identifier
-                bw.Write((byte)1); // major version
-                bw.Write((byte)1); // minor version
-                bw.Write((byte)1); // units: 1 = DPI
-                bw.Write(ToBigEndian((short)dpi)); // X density
-                bw.Write(ToBigEndian((short)dpi)); // Y density
-                bw.Write((byte)0); // X thumbnail
-                bw.Write((byte)0); // Y thumbnail
-            }
+                using (MemoryStream output = new MemoryStream())
+                {
+                    // Copy header (first two bytes: FF D8)
+                    output.WriteByte((byte)input.ReadByte());
+                    output.WriteByte((byte)input.ReadByte());
 
-            // Copy the rest
-            input.CopyTo(output);
-            return output.ToArray();
+                    // Write APP0 segment (JFIF with DPI)
+                    using (var bw = new BinaryWriter(output, System.Text.Encoding.ASCII, true))
+                    {
+                        bw.Write((byte)0xFF); // marker
+                        bw.Write((byte)0xE0); // APP0
+                        bw.Write(ToBigEndian((short)16)); // length
+                        bw.Write(System.Text.Encoding.ASCII.GetBytes("JFIF\0")); // identifier
+                        bw.Write((byte)1); // major version
+                        bw.Write((byte)1); // minor version
+                        bw.Write((byte)1); // units: 1 = DPI
+                        bw.Write(ToBigEndian((short)dpi)); // X density
+                        bw.Write(ToBigEndian((short)dpi)); // Y density
+                        bw.Write((byte)0); // X thumbnail
+                        bw.Write((byte)0); // Y thumbnail
+                    }
+
+                    // Copy the rest
+                    input.CopyTo(output);
+                    return output.ToArray();
+                }
+            }
         }
 
         public static byte[] InjectPhysChunk(byte[] pngBytes, int dpi)
@@ -66,37 +79,41 @@ namespace Barcoded
             const double inchesPerMeter = 39.3701;
             int pixelsPerMeter = (int)(dpi * inchesPerMeter);
 
-            using var ms = new MemoryStream();
-            using var bw = new BinaryWriter(ms);
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (BinaryWriter bw = new BinaryWriter(ms))
+                {
+                    // PNG header
+                    bw.Write(pngBytes, 0, 8);
 
-            // PNG header
-            bw.Write(pngBytes.AsSpan(0, 8));
+                    // IHDR chunk (standard length: 13 bytes data + 4 bytes type + 4 bytes length + 4 bytes CRC = 25)
+                    const int ihdrChunkLength = 13;
+                    const int ihdrFullLength = ihdrChunkLength + 4 + 4 + 4;
+                    bw.Write(pngBytes, 8, ihdrFullLength);
 
-            // IHDR chunk (standard length: 13 bytes data + 4 bytes type + 4 bytes length + 4 bytes CRC = 25)
-            const int ihdrChunkLength = 13;
-            const int ihdrFullLength = ihdrChunkLength + 4 + 4 + 4;
-            bw.Write(pngBytes.AsSpan(8, ihdrFullLength));
+                    // Create pHYs chunk
+                    using (MemoryStream chunkData = new MemoryStream())
+                    {
+                        using (BinaryWriter chunkWriter = new BinaryWriter(chunkData))
+                        {
+                            chunkWriter.Write(ToBigEndian(pixelsPerMeter)); // X axis
+                            chunkWriter.Write(ToBigEndian(pixelsPerMeter)); // Y axis
+                            chunkWriter.Write((byte)1); // unit = meter
+                        }
+                        byte[] physData = chunkData.ToArray();
+                        byte[] chunkType = System.Text.Encoding.ASCII.GetBytes("pHYs");
 
-            // Create pHYs chunk
-            using var chunkData = new MemoryStream();
-            using var chunkWriter = new BinaryWriter(chunkData);
-            chunkWriter.Write(ToBigEndian(pixelsPerMeter)); // X axis
-            chunkWriter.Write(ToBigEndian(pixelsPerMeter)); // Y axis
-            chunkWriter.Write((byte)1); // unit = meter
-
-            byte[] physData = chunkData.ToArray();
-            byte[] chunkType = System.Text.Encoding.ASCII.GetBytes("pHYs");
-
-            bw.Write(ToBigEndian(physData.Length));
-            bw.Write(chunkType);
-            bw.Write(physData);
-            uint crc = Crc32(chunkType.Concat(physData).ToArray());
-            bw.Write(ToBigEndian(crc));
-
-            // Write rest of original PNG (after IHDR)
-            bw.Write(pngBytes.AsSpan(8 + ihdrFullLength));
-
-            return ms.ToArray();
+                        bw.Write(ToBigEndian(physData.Length));
+                        bw.Write(chunkType);
+                        bw.Write(physData);
+                        uint crc = Crc32(chunkType.Concat(physData).ToArray());
+                        bw.Write(ToBigEndian(crc));
+                    }
+                    // Write rest of original PNG (after IHDR)
+                    bw.Write(pngBytes, 8 + ihdrFullLength, pngBytes.Length - (8 + ihdrFullLength));
+                    return ms.ToArray();
+                }
+            }
         }
 
         private static byte[] ToBigEndian(int value) => BitConverter.GetBytes(IPAddress.HostToNetworkOrder(value));

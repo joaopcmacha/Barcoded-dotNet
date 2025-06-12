@@ -35,13 +35,14 @@ namespace Barcoded
             float lastGoodSize = fontSize;
             for (; fontSize <= maxFontSize; fontSize++)
             {
-                using var font = new SKFont(typeface, fontSize);
-                float textWidth = font.MeasureText(textToFit);
-                if (textWidth < width)
-                    lastGoodSize = fontSize;
-                else
-                    break;
-
+                using (SKFont font = new SKFont(typeface, fontSize))
+                {
+                    float textWidth = font.MeasureText(textToFit);
+                    if (textWidth < width)
+                        lastGoodSize = fontSize;
+                    else
+                        break;
+                }
             }
             return lastGoodSize;
         }
@@ -55,12 +56,13 @@ namespace Barcoded
         /// <returns>Measured image size</returns>
         internal static SKSize GetStringElementSize(string text, SKTypeface typeface, float fontSize, int dpi)
         {
-            using var font = new SKFont(typeface, fontSize);
-
-            float width = font.MeasureText(text);
-            var metrics = font.Metrics;
-            float height = font.Metrics.Descent - font.Metrics.Ascent;
-            return new SKSize(width, height);
+            using (SKFont font = new SKFont(typeface, fontSize))
+            {
+                float width = font.MeasureText(text);
+                var metrics = font.Metrics;
+                float height = font.Metrics.Descent - font.Metrics.Ascent;
+                return new SKSize(width, height);
+            }
         }
 
         /// <summary>
@@ -71,13 +73,24 @@ namespace Barcoded
         /// <returns>Image codec.</returns>
         internal static ImageFormat FindCodecInfo(string codecName)
         {
-            return codecName.ToUpper() switch
+            ImageFormat imageFormat = ImageFormat.Png; // Default to PNG if codec not found
+            switch(codecName.ToUpper())
             {
-                "PNG" => ImageFormat.Png,
-                "JPG" or "JPEG" => ImageFormat.Jpeg,
-                "BMP" => ImageFormat.Bmp,
-                _ => ImageFormat.Png
-            };
+                case "PNG":
+                    imageFormat = ImageFormat.Png;
+                    break;
+                case "JPG":
+                case "JPEG":
+                    imageFormat = ImageFormat.Jpeg;
+                    break;
+                case "BMP":
+                    imageFormat = ImageFormat.Bmp;
+                    break;
+                default:
+                    // Unsupported codec, default to PNG
+                    break;
+            }
+            return imageFormat;
         }
 
         /// <summary>
@@ -88,13 +101,22 @@ namespace Barcoded
         /// <exception cref="ArgumentOutOfRangeException">Thrown if the format is not supported.</exception>
         internal static SKEncodedImageFormat ToSkiaImageFormat(ImageFormat format)
         {
-            return format switch
+            SKEncodedImageFormat skFormat;
+            switch (format)
             {
-                ImageFormat.Bmp => SKEncodedImageFormat.Bmp,
-                ImageFormat.Jpeg => SKEncodedImageFormat.Jpeg,
-                ImageFormat.Png => SKEncodedImageFormat.Png,
-                _ => throw new ArgumentOutOfRangeException(nameof(format), $"Unsupported image format: {format}")
-            };
+                case ImageFormat.Bmp:
+                    skFormat = SKEncodedImageFormat.Bmp;
+                    break;
+                case ImageFormat.Jpeg:
+                    skFormat = SKEncodedImageFormat.Jpeg;
+                    break;
+                case ImageFormat.Png:
+                    skFormat = SKEncodedImageFormat.Png;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(format), $"Unsupported image format: {format}");
+            }
+            return skFormat;
         }
 
     }

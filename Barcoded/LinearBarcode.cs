@@ -250,13 +250,17 @@ namespace Barcoded
                 throw new InvalidOperationException("No BarcodeValue set");
             }
 
-            using var imageMemoryStream = Encoder.GetImage(ValueToEncode);
-            imageMemoryStream.Position = 0;
-            using var skiaImage = SKImage.FromEncodedData(imageMemoryStream);
-            _image = skiaImage?.ToBitmap() ?? throw new InvalidOperationException("Failed to create image from stream.");
-            _vectors = new LinearVectors(Encoder);
-            _barcodeValueChanged = false;
-            return imageMemoryStream.ToArray();
+            using (MemoryStream imageMemoryStream = Encoder.GetImage(ValueToEncode))
+            {
+                using (SKImage skiaImage = SKImage.FromEncodedData(imageMemoryStream))
+                {
+                    imageMemoryStream.Position = 0;
+                    _image = skiaImage?.ToBitmap() ?? throw new InvalidOperationException("Failed to create image from stream.");
+                    _vectors = new LinearVectors(Encoder);
+                    _barcodeValueChanged = false;
+                    return imageMemoryStream.ToArray();
+                }
+            }
         }
 
         public static SKBitmap ToBitmap(SKImage image)
@@ -277,13 +281,17 @@ namespace Barcoded
 
             if (_barcodeValueChanged | Encoder.PropertyChanged)
             {
-                using var imageMemoryStream = Encoder.GetImage(this.ValueToEncode);
-                imageMemoryStream.Position = 0;
-                using var skiaImage = SKImage.FromEncodedData(imageMemoryStream);
-                _image = skiaImage?.ToBitmap();
-                _vectors = new LinearVectors(Encoder);
-                _barcodeValueChanged = false;
-                Encoder.ResetPropertyChanged();
+                using (MemoryStream imageMemoryStream = Encoder.GetImage(this.ValueToEncode))
+                {
+                    using (SKImage skiaImage = SKImage.FromEncodedData(imageMemoryStream))
+                    {
+                        imageMemoryStream.Position = 0;
+                        _image = skiaImage?.ToBitmap();
+                        _vectors = new LinearVectors(Encoder);
+                        _barcodeValueChanged = false;
+                        Encoder.ResetPropertyChanged();
+                    }
+                }
             }
         }
     }
@@ -293,8 +301,7 @@ namespace Barcoded
         public static SKBitmap ToBitmap(this SKImage image)
         {
             if (image == null) return null;
-            using var data = image.Encode();
-            return SKBitmap.Decode(data);
+            return SKBitmap.Decode(image.EncodedData);
         }
     }
 }

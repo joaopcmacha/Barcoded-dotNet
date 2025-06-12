@@ -137,42 +137,44 @@ namespace Barcoded
 
             // Create the combined image.
             SKBitmap combinedImage = new SKBitmap(imageWidth, imageHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
-            using var combinedGraphics = new SKCanvas(combinedImage);
-
-            // Add each element to the combined image.
-            using (var paint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
+            using (SKCanvas combinedGraphics = new SKCanvas(combinedImage))
             {
-                combinedGraphics.DrawRect(0, 0, combinedImage.Width, combinedImage.Height, paint);
+
+
+                // Add each element to the combined image.
+                using (var paint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
+                {
+                    combinedGraphics.DrawRect(0, 0, combinedImage.Width, combinedImage.Height, paint);
+                }
+                combinedGraphics.DrawBitmap(barcodeImage.Image, barcodeImage.Position.XPosition, barcodeImage.Position.YPosition);
+                combinedGraphics.DrawBitmap(encodingTextImage.Image, encodingTextImage.Position.XPosition, encodingTextImage.Position.YPosition);
+                combinedGraphics.DrawBitmap(humanReadableImage.Image, humanReadableImage.Position.XPosition, humanReadableImage.Position.YPosition);
+
+                // Save the image to the memory stream.
+                // Convert Barcoded.ImageFormat to SKEncodedImageFormat for SkiaSharp
+                SKEncodedImageFormat skFormat = ImageHelpers.ToSkiaImageFormat(linearEncoder.ImageCodec);
+                using (var image = SKImage.FromBitmap(combinedImage))
+                using (var data = image.Encode(skFormat, 100))
+                {
+                    var rawBytes = data.ToArray();
+                    var withDpi = ImageDpiInjector.InjectDpi(rawBytes, linearEncoder.Dpi, linearEncoder.ImageCodec);
+                    memoryStream.Write(withDpi, 0, withDpi.Length);
+                    memoryStream.Position = 0;
+                }
+
+                // Set flag if xdimension was changed.
+                if (linearEncoder.XDimension != xDimensionOriginal)
+                {
+                    linearEncoder.XDimensionChanged = true;
+                }
+
+                // Dispose of the objects we won't need any more.
+                barcodeImage.Image.Dispose();
+                humanReadableImage.Image.Dispose();
+                encodingTextImage.Image.Dispose();
+                combinedGraphics.Dispose();
+                combinedImage.Dispose();
             }
-            combinedGraphics.DrawBitmap(barcodeImage.Image, barcodeImage.Position.XPosition, barcodeImage.Position.YPosition);
-            combinedGraphics.DrawBitmap(encodingTextImage.Image, encodingTextImage.Position.XPosition, encodingTextImage.Position.YPosition);
-            combinedGraphics.DrawBitmap(humanReadableImage.Image, humanReadableImage.Position.XPosition, humanReadableImage.Position.YPosition);
-
-            // Save the image to the memory stream.
-            // Convert Barcoded.ImageFormat to SKEncodedImageFormat for SkiaSharp
-            SKEncodedImageFormat skFormat = ImageHelpers.ToSkiaImageFormat(linearEncoder.ImageCodec);
-            using (var image = SKImage.FromBitmap(combinedImage))
-            using (var data = image.Encode(skFormat, 100))
-            {
-                var rawBytes = data.ToArray();
-                var withDpi = ImageDpiInjector.InjectDpi(rawBytes, linearEncoder.Dpi, linearEncoder.ImageCodec);
-                memoryStream.Write(withDpi, 0, withDpi.Length);
-                memoryStream.Position = 0;
-            }
-
-            // Set flag if xdimension was changed.
-            if (linearEncoder.XDimension != xDimensionOriginal)
-            {
-                linearEncoder.XDimensionChanged = true;
-            }
-
-            // Dispose of the objects we won't need any more.
-            barcodeImage.Image.Dispose();
-            humanReadableImage.Image.Dispose();
-            encodingTextImage.Image.Dispose();
-            combinedGraphics.Dispose();
-            combinedImage.Dispose();
-
             linearEncoder.ResetPropertyChanged();
         }
 
@@ -230,22 +232,24 @@ namespace Barcoded
             );
 
             // Create a new graphics to draw on the barcode image
-            using var labelValueGraphics = new SKCanvas(humanReadableElement.Image);
-
-            using (var paint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
+            using (SKCanvas labelValueGraphics = new SKCanvas(humanReadableElement.Image))
             {
-                labelValueGraphics.DrawRect(1, 1, humanReadableElement.Image.Width, humanReadableElement.Image.Height, paint);
-            }
 
-            using (var font = new SKFont(linearEncoder.HumanReadableFont, linearEncoder.HumanReadableFontSize))
-            {
-                using (var paint = new SKPaint { Color = SKColors.Black, IsAntialias = true })
+                using (var paint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
                 {
-                    labelValueGraphics.DrawText(linearEncoder.HumanReadableValue, 1, 1 + font.Size, font, paint);
+                    labelValueGraphics.DrawRect(1, 1, humanReadableElement.Image.Width, humanReadableElement.Image.Height, paint);
                 }
-            }
 
-            labelValueGraphics.Flush();
+                using (SKFont font = new SKFont(linearEncoder.HumanReadableFont, linearEncoder.HumanReadableFontSize))
+                {
+                    using (SKPaint paint = new SKPaint { Color = SKColors.Black, IsAntialias = true })
+                    {
+                        labelValueGraphics.DrawText(linearEncoder.HumanReadableValue, 1, 1 + font.Size, font, paint);
+                    }
+                }
+
+                labelValueGraphics.Flush();
+            }
             humanReadableElement.Position.XPosition = quietzone + (barcodeWidth - (int)labelTextSize.Width) / 2;
 
             return humanReadableElement;
@@ -295,56 +299,62 @@ namespace Barcoded
                 new SKBitmap(humanReadableImageWidth, (int)Math.Ceiling(humanReadableSize.Height), SKColorType.Bgra8888, SKAlphaType.Premul)
             );
 
-            using var humanReadableGraphics = new SKCanvas(humanReadableElement.Image);
-
-            // Preencher fundo de branco
-            using (var bgPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
+            using (SKCanvas humanReadableGraphics = new SKCanvas(humanReadableElement.Image))
             {
-                humanReadableGraphics.DrawRect(0, 0, humanReadableElement.Image.Width, humanReadableElement.Image.Height, bgPaint);
-            }
 
-            int xPosition = 0;
-            int yPosition = 0;
-
-            using var font = new SKFont(linearEncoder.HumanReadableFont, humanReadableFontSize);
-            using var paint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
-
-            // Add any human readable prefix
-            if (!string.IsNullOrEmpty(linearEncoder.LinearEncoding.HumanReadablePrefix))
-            {
-                string prefix = linearEncoder.LinearEncoding.HumanReadablePrefix;
-                float prefixTextWidth = font.MeasureText(prefix, paint);
-                float prefixX = xPosition + (prefixWidth - prefixTextWidth) / 2f;
-                float prefixY = yPosition + font.Size;
-                humanReadableGraphics.DrawText(prefix, prefixX, prefixY, SKTextAlign.Center, font, paint);
-                xPosition += prefixWidth;
-            }
-
-            // Draw each symbol
-            for (int symbol = 0; symbol <= linearEncoder.LinearEncoding.Symbols.Count - 1; symbol++)
-            {
-                string humanReadableCharacter = linearEncoder.LinearEncoding.Symbols[symbol].Character;
-                int symbolWidth = linearEncoder.LinearEncoding.Symbols[symbol].Width;
-
-                if (linearEncoder.LinearEncoding.Symbols[symbol].CharacterType == 0)
+                // Preencher fundo de branco
+                using (var bgPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
                 {
-                    float charTextWidth = font.MeasureText(humanReadableCharacter, paint);
-                    float charX = xPosition + (symbolWidth * linearEncoder.XDimension - charTextWidth) / 2f;
-                    float charY = yPosition + font.Size;
-                    humanReadableGraphics.DrawText(humanReadableCharacter, charX, charY, SKTextAlign.Center, font, paint);
+                    humanReadableGraphics.DrawRect(0, 0, humanReadableElement.Image.Width, humanReadableElement.Image.Height, bgPaint);
                 }
 
-                xPosition += symbolWidth * linearEncoder.XDimension;
-            }
+                int xPosition = 0;
+                int yPosition = 0;
 
-            // Add any human readable suffix
-            if (!string.IsNullOrEmpty(linearEncoder.LinearEncoding.HumanReadableSuffix))
-            {
-                string suffix = linearEncoder.LinearEncoding.HumanReadableSuffix;
-                float suffixTextWidth = font.MeasureText(suffix, paint);
-                float suffixX = xPosition + (suffixWidth - suffixTextWidth) / 2f;
-                float suffixY = yPosition + font.Size;
-                humanReadableGraphics.DrawText(suffix, suffixX, suffixY, SKTextAlign.Center, font, paint);
+                using (var font = new SKFont(linearEncoder.HumanReadableFont, humanReadableFontSize))
+                {
+                    using (var paint = new SKPaint { Color = SKColors.Black, IsAntialias = true })
+                    {
+
+                        // Add any human readable prefix
+                        if (!string.IsNullOrEmpty(linearEncoder.LinearEncoding.HumanReadablePrefix))
+                        {
+                            string prefix = linearEncoder.LinearEncoding.HumanReadablePrefix;
+                            float prefixTextWidth = font.MeasureText(prefix, paint);
+                            float prefixX = xPosition + (prefixWidth - prefixTextWidth) / 2f;
+                            float prefixY = yPosition + font.Size;
+                            humanReadableGraphics.DrawText(prefix, prefixX, prefixY, SKTextAlign.Center, font, paint);
+                            xPosition += prefixWidth;
+                        }
+
+                        // Draw each symbol
+                        for (int symbol = 0; symbol <= linearEncoder.LinearEncoding.Symbols.Count - 1; symbol++)
+                        {
+                            string humanReadableCharacter = linearEncoder.LinearEncoding.Symbols[symbol].Character;
+                            int symbolWidth = linearEncoder.LinearEncoding.Symbols[symbol].Width;
+
+                            if (linearEncoder.LinearEncoding.Symbols[symbol].CharacterType == 0)
+                            {
+                                float charTextWidth = font.MeasureText(humanReadableCharacter, paint);
+                                float charX = xPosition + (symbolWidth * linearEncoder.XDimension - charTextWidth) / 2f;
+                                float charY = yPosition + font.Size;
+                                humanReadableGraphics.DrawText(humanReadableCharacter, charX, charY, SKTextAlign.Center, font, paint);
+                            }
+
+                            xPosition += symbolWidth * linearEncoder.XDimension;
+                        }
+
+                        // Add any human readable suffix
+                        if (!string.IsNullOrEmpty(linearEncoder.LinearEncoding.HumanReadableSuffix))
+                        {
+                            string suffix = linearEncoder.LinearEncoding.HumanReadableSuffix;
+                            float suffixTextWidth = font.MeasureText(suffix, paint);
+                            float suffixX = xPosition + (suffixWidth - suffixTextWidth) / 2f;
+                            float suffixY = yPosition + font.Size;
+                            humanReadableGraphics.DrawText(suffix, suffixX, suffixY, SKTextAlign.Center, font, paint);
+                        }
+                    }
+                }
             }
 
             humanReadableElement.Position.XPosition = quietzone - prefixWidth;
@@ -368,38 +378,40 @@ namespace Barcoded
                 new SKBitmap(barcodeImageWidth, linearEncoder.BarcodeHeight, SKColorType.Bgra8888, SKAlphaType.Premul)
             );
 
-            using var barcodeGraphics = new SKCanvas(barcodeElement.Image);
-
-            int xPosition = 0;
-            int yPosition = 0;
-
-            // Preenche o fundo de branco
-            using (var paint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
+            using (var barcodeGraphics = new SKCanvas(barcodeElement.Image))
             {
-                barcodeGraphics.DrawRect(xPosition, yPosition, barcodeElement.Image.Width, barcodeElement.Image.Height, paint);
-            }
 
-            // Percorre cada símbolo codificado e desenha barras e espaços
-            for (int symbol = 0; symbol <= linearEncoder.LinearEncoding.Symbols.Count - 1; symbol++)
-            {
-                LinearPattern symbolPattern = linearEncoder.LinearEncoding.Symbols[symbol].Pattern;
+                int xPosition = 0;
+                int yPosition = 0;
 
-                for (int module = 0; module <= symbolPattern.Count - 1; module++)
+                // Preenche o fundo de branco
+                using (var paint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
                 {
-                    switch (symbolPattern[module].ModuleType)
+                    barcodeGraphics.DrawRect(xPosition, yPosition, barcodeElement.Image.Width, barcodeElement.Image.Height, paint);
+                }
+
+                // Percorre cada símbolo codificado e desenha barras e espaços
+                for (int symbol = 0; symbol <= linearEncoder.LinearEncoding.Symbols.Count - 1; symbol++)
+                {
+                    LinearPattern symbolPattern = linearEncoder.LinearEncoding.Symbols[symbol].Pattern;
+
+                    for (int module = 0; module <= symbolPattern.Count - 1; module++)
                     {
-                        case ModuleType.Bar: // Bar
-                            int barWidth = symbolPattern[module].Width * linearEncoder.XDimension;
-                            using (var barPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Fill })
-                            {
-                                barcodeGraphics.DrawRect(xPosition, yPosition, barWidth, linearEncoder.BarcodeHeight, barPaint);
-                            }
-                            xPosition += barWidth;
-                            break;
-                        case ModuleType.Space: // Space
-                            int spaceWidth = symbolPattern[module].Width * linearEncoder.XDimension;
-                            xPosition += spaceWidth;
-                            break;
+                        switch (symbolPattern[module].ModuleType)
+                        {
+                            case ModuleType.Bar: // Bar
+                                int barWidth = symbolPattern[module].Width * linearEncoder.XDimension;
+                                using (var barPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Fill })
+                                {
+                                    barcodeGraphics.DrawRect(xPosition, yPosition, barWidth, linearEncoder.BarcodeHeight, barPaint);
+                                }
+                                xPosition += barWidth;
+                                break;
+                            case ModuleType.Space: // Space
+                                int spaceWidth = symbolPattern[module].Width * linearEncoder.XDimension;
+                                xPosition += spaceWidth;
+                                break;
+                        }
                     }
                 }
             }
@@ -449,68 +461,74 @@ namespace Barcoded
                 new SKBitmap(encodingImageWidth, (int)Math.Ceiling(encodingTextSize.Height), SKColorType.Bgra8888, SKAlphaType.Premul)
             );
 
-            using var encodingTextGraphics = new SKCanvas(encodingTextElement.Image);
-
-            // Preencher fundo de branco
-            using (var bgPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
+            using (var encodingTextGraphics = new SKCanvas(encodingTextElement.Image))
             {
-                encodingTextGraphics.DrawRect(0, 0, encodingImageWidth, (int)Math.Ceiling(encodingTextSize.Height), bgPaint);
-            }
 
-            int xPosition = 0;
-            int yPosition = 0;
-
-            using var font = new SKFont(linearEncoder.EncodingFontFamily, encodingFontSize);
-            using var paint = new SKPaint { IsAntialias = true };
-
-            for (int symbol = 0; symbol <= linearEncoder.LinearEncoding.Symbols.Count - 1; symbol++)
-            {
-                string encodeCharacter = linearEncoder.LinearEncoding.Symbols[symbol].Character;
-                int symbolWidth = linearEncoder.LinearEncoding.Symbols[symbol].Width;
-
-                // Ajusta fonte para o símbolo atual, se necessário
-                float symbolFontSize = ImageHelpers.GetSizedFontForWidth(
-                    encodeCharacter.Length,
-                    symbolWidth * linearEncoder.XDimension,
-                    linearEncoder.Dpi,
-                    linearEncoder.EncodingFontFamily
-                );
-                font.Size = symbolFontSize;
-
-                // Determina cor de fundo e texto
-                if (linearEncoder.LinearEncoding.Symbols[symbol].CharacterType == 1)
+                // Preencher fundo de branco
+                using (var bgPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill })
                 {
-                    // Fundo preto, texto branco
-                    using (var barPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Fill })
-                    {
-                        encodingTextGraphics.DrawRect(xPosition, yPosition, symbolWidth * linearEncoder.XDimension, encodingTextElement.Image.Height, barPaint);
-                    }
-                    paint.Color = SKColors.White;
-                }
-                else
-                {
-                    // Fundo branco, texto preto, desenha retângulo de borda
-                    using (var borderPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = 1 })
-                    {
-                        encodingTextGraphics.DrawRect(
-                            xPosition,
-                            yPosition,
-                            (symbolWidth * linearEncoder.XDimension) - 1,
-                            encodingTextElement.Image.Height - 1,
-                            borderPaint
-                        );
-                    }
-                    paint.Color = SKColors.Black;
+                    encodingTextGraphics.DrawRect(0, 0, encodingImageWidth, (int)Math.Ceiling(encodingTextSize.Height), bgPaint);
                 }
 
-                // Centraliza o texto no bloco
-                float charTextWidth = paint.MeasureText(encodeCharacter);
-                float charX = xPosition + ((symbolWidth * linearEncoder.XDimension) - charTextWidth) / 2f;
-                float charY = yPosition + font.Size;
+                int xPosition = 0;
+                int yPosition = 0;
 
-                encodingTextGraphics.DrawText(encodeCharacter, charX, charY, paint);
+                using (var font = new SKFont(linearEncoder.EncodingFontFamily, encodingFontSize))
+                {
+                    using (var paint = new SKPaint { IsAntialias = true })
+                    {
 
-                xPosition += symbolWidth * linearEncoder.XDimension;
+                        for (int symbol = 0; symbol <= linearEncoder.LinearEncoding.Symbols.Count - 1; symbol++)
+                        {
+                            string encodeCharacter = linearEncoder.LinearEncoding.Symbols[symbol].Character;
+                            int symbolWidth = linearEncoder.LinearEncoding.Symbols[symbol].Width;
+
+                            // Ajusta fonte para o símbolo atual, se necessário
+                            float symbolFontSize = ImageHelpers.GetSizedFontForWidth(
+                                encodeCharacter.Length,
+                                symbolWidth * linearEncoder.XDimension,
+                                linearEncoder.Dpi,
+                                linearEncoder.EncodingFontFamily
+                            );
+                            font.Size = symbolFontSize;
+
+                            // Determina cor de fundo e texto
+                            if (linearEncoder.LinearEncoding.Symbols[symbol].CharacterType == 1)
+                            {
+                                // Fundo preto, texto branco
+                                using (var barPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Fill })
+                                {
+                                    encodingTextGraphics.DrawRect(xPosition, yPosition, symbolWidth * linearEncoder.XDimension, encodingTextElement.Image.Height, barPaint);
+                                }
+                                paint.Color = SKColors.White;
+                            }
+                            else
+                            {
+                                // Fundo branco, texto preto, desenha retângulo de borda
+                                using (var borderPaint = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Stroke, StrokeWidth = 1 })
+                                {
+                                    encodingTextGraphics.DrawRect(
+                                        xPosition,
+                                        yPosition,
+                                        (symbolWidth * linearEncoder.XDimension) - 1,
+                                        encodingTextElement.Image.Height - 1,
+                                        borderPaint
+                                    );
+                                }
+                                paint.Color = SKColors.Black;
+                            }
+
+                            // Centraliza o texto no bloco
+                            float charTextWidth = font.MeasureText(encodeCharacter);
+                            float charX = xPosition + ((symbolWidth * linearEncoder.XDimension) - charTextWidth) / 2f;
+                            float charY = yPosition + font.Size;
+
+                            encodingTextGraphics.DrawText(encodeCharacter, charX, charY, SKTextAlign.Center, font, paint);
+
+                            xPosition += symbolWidth * linearEncoder.XDimension;
+                        }
+                    }
+                }
             }
 
             encodingTextElement.Position.XPosition = quietzone;
@@ -545,8 +563,10 @@ namespace Barcoded
         /// <param name="destinationPath">The destination file path where the image will be saved.</param>
         public static void WriteImageToFile(LinearEncoder linearEncoder, string destinationPath)
         {
-            using MemoryStream ms = DrawImageMemoryStream(linearEncoder);
-            System.IO.File.WriteAllBytes(destinationPath, ms.ToArray());
+            using (MemoryStream ms = DrawImageMemoryStream(linearEncoder))
+            {
+                System.IO.File.WriteAllBytes(destinationPath, ms.ToArray());
+            }
         }
 
     }

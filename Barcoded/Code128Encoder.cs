@@ -226,7 +226,7 @@ namespace Barcoded
             int symbol = _symbologyCharEncode[GetSubsetAsString(lastSubset) + GetSubsetAsString(sectionSubset)];
             LinearPattern symbolPattern = _patternDictionary[symbol];
             AddSymbolToEncode(character, 1, symbol, symbolPattern);
-            ZplEncode += GetZplFunction(GetSubsetAsString(lastSubset) + GetSubsetAsString(sectionSubset));
+            ZplEncode +=  GetZplFunction(GetSubsetAsString(lastSubset) + GetSubsetAsString(sectionSubset));
             
             // Add FNC1 symbol if GS1-128 Barcode
             if (lastSubset == Code128Subset.Null && _isGs1)
@@ -551,7 +551,7 @@ namespace Barcoded
             }
 
             _patternDictionary = new Dictionary<int, LinearPattern>
-            {                                                                    //   A     |    B    | C
+            {                                                           //   A     |    B    | C
                 {0, new LinearPattern("212222", ModuleType.Bar)},       // SPACE   | SPACE   | 00
                 {1, new LinearPattern("222122", ModuleType.Bar)},       // !       | !       | 01
                 {2, new LinearPattern("222221", ModuleType.Bar)},       // "       | "       | 02
