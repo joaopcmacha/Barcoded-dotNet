@@ -4,7 +4,7 @@ A C#/.NET library to generate barcode images.
 
 Upgraded to .Net 8 and SkiaSharp.
 
-(Based on the [original code]() from Brett Reynolds)
+(Based on the [original code](https://github.com/brettreynolds/Barcoded-dotNet-Framework) from Brett Reynolds)
 
 
 ## Usage
